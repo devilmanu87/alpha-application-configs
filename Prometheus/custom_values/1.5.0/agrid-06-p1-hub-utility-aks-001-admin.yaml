@@ -1,0 +1,401 @@
+# AGRID ENG UTILITY values for kube-prometheus-stack.
+alertmanager:
+  ## Deploy alertmanager
+  ##
+  enabled: true
+  
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+    maxUnavailable: ""
+
+  ingress:
+    enabled: true
+
+    # For Kubernetes >= 1.18 you should specify the ingress-controller via the field ingressClassName
+    # See https://kubernetes.io/blog/2020/04/02/improvements-to-the-ingress-api-in-kubernetes-1.18/#specifying-the-class-of-an-ingress
+    ingressClassName: nginx
+
+    annotations:
+      nginx.ingress.kubernetes.io/auth-url: "https://$host/oauth2/auth"
+      nginx.ingress.kubernetes.io/auth-signin: "https://$host/oauth2/start?rd=$escaped_request_uri"      
+
+    labels: {}
+
+    ## Hosts must be provided if Ingress is enabled.
+    ##
+    hosts:
+      - agrid-06-p1-obs.ops.crd.com
+
+    ## Paths to use for ingress rules - one path should match the alertmanagerSpec.routePrefix
+    ##
+    paths:
+    - /alertmanager
+
+    ## For Kubernetes >= 1.18 you should specify the pathType (determines how Ingress paths should be matched)
+    ## See https://kubernetes.io/blog/2020/04/02/improvements-to-the-ingress-api-in-kubernetes-1.18/#better-path-matching-with-path-types
+    pathType: ImplementationSpecific
+
+  alertmanagerSpec:
+    ## Standard object's metadata. More info: https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#metadata
+    ## Metadata Labels and Annotations gets propagated to the Alertmanager pods.
+    ##
+    podMetadata: {}
+
+    ## Image of Alertmanager
+    ##
+    image:
+      repository: agrid06p1hubacr001.azurecr.io/alpha-telemetry/quay.io/prometheus/alertmanager
+      sha: ""
+
+    logFormat: json
+
+    replicas: 1
+
+    routePrefix: /alertmanager
+
+    podAntiAffinity: "hard"
+
+    podAntiAffinityTopologyKey: topology.kubernetes.io/zone
+
+    affinity:
+      nodeAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+        - preference:
+            matchExpressions:
+            - key: app
+              operator: In
+              values:
+              - metricssvc
+          weight: 100	   
+
+    tolerations: 
+      - key: "sku"
+        operator: "Equal"
+        value: "metricssvc"
+        effect: "NoSchedule"    
+
+grafana:
+  enabled: true
+  replicas: 1
+
+  adminPassword: ""
+  grafana.ini:
+    server:
+      domain: agrid-06-p1-obs.ops.crd.com
+      root_url: "%(protocol)s://%(domain)s/grafana"
+      serve_from_sub_path: true
+    live:
+      allowed_origins: "https://*.crd.com"
+    dataproxy:
+      logging: true
+    log.console:
+      format: json
+      level: debug
+    analytics:
+      check_for_updates: false          
+
+  ingress:
+    ## If true, Grafana Ingress will be created
+    ##
+    enabled: true
+
+    ingressClassName: nginx
+
+    ## Annotations for Grafana Ingress
+    ##
+    annotations:
+      nginx.ingress.kubernetes.io/auth-url: "https://$host/oauth2/auth"
+      nginx.ingress.kubernetes.io/auth-signin: "https://$host/oauth2/start?rd=$escaped_request_uri"
+      nginx.ingress.kubernetes.io/rewrite-target: /$1
+      nginx.ingress.kubernetes.io/use-regex: "true"
+
+    hosts:
+      - agrid-06-p1-obs.ops.crd.com
+
+    ## Path for grafana ingress
+    path: /grafana/?(.*)
+
+  testFramework:
+    enabled: true
+    image: "agrid06p1hubacr001.azurecr.io/alpha-telemetry/bats/bats"
+
+  sidecar:
+    image:
+      repository: agrid06p1hubacr001.azurecr.io/alpha-telemetry/quay.io/kiwigrid/k8s-sidecar
+
+  additionalDataSources:
+  - name: elasticsearch
+    access: proxy
+    basicAuth: false
+    # basicAuthPassword: pass
+    # basicAuthUser: daco
+    editable: false
+    database: '*'
+    jsonData:
+      interval: Daily
+      esVersion: 7.0.0
+      logMessageField: message
+      logLevelField: level
+      timeField: "@timestamp"
+    orgId: 1
+    type: elasticsearch
+    url: http://elasticsearch-master.obs-logging:9200
+    version: 1
+  - name: jaeger-p1
+    access: proxy
+    basicAuth: false
+    # basicAuthPassword: pass
+    # basicAuthUser: daco
+    editable: false
+    orgId: 1
+    type: jaeger
+    url: http://jaeger-query.obs-tracing/jaeger/p1
+    version: 1  
+
+  serviceMonitor:
+    enabled: true  
+
+  # podDisruptionBudget:
+  #   # minAvailable: 1
+  #   maxUnavailable: 1
+  image:
+    repository: agrid06p1hubacr001.azurecr.io/alpha-telemetry/grafana/grafana
+  downloadDashboardsImage:
+    repository: agrid06p1hubacr001.azurecr.io/alpha-telemetry/curlimages/curl
+
+  ## Tolerations for pod assignment
+  ## ref: https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/
+  ##
+  tolerations:
+    - key: "sku"
+      operator: "Equal"
+      value: "metricssvc"
+      effect: "NoSchedule"   
+
+  ## Affinity for pod assignment
+  ## ref: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#affinity-and-anti-affinity
+  ##
+  affinity:
+    nodeAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+      - preference:
+          matchExpressions:
+          - key: app
+            operator: In
+            values:
+            - metricssvc
+        weight: 100
+    podAntiAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        - labelSelector:
+            matchExpressions:
+            - key: app.kubernetes.io/name
+              operator: In
+              values:
+              - grafana
+          topologyKey: topology.kubernetes.io/zone
+  persistence:
+    type: statefulset
+    enabled: true
+    storageClassName: obs-sc
+    accessModes:
+      - ReadWriteOnce
+    size: 120Gi
+    finalizers:
+      - kubernetes.io/pvc-protection
+     
+  initChownData:
+    ## initChownData container image
+    ##
+    image:
+      repository: agrid06p1hubacr001.azurecr.io/alpha-telemetry/busybox
+
+## Configuration for kube-state-metrics subchart
+##
+kube-state-metrics:
+  image:
+    repository: agrid06p1hubacr001.azurecr.io/alpha-telemetry/k8s.gcr.io/kube-state-metrics/kube-state-metrics
+  metricLabelsAllowlist:
+  - pods=[*]
+  metricAnnotationsAllowList:
+  - pods=[*]
+  tolerations:
+    - key: "sku"
+      operator: "Equal"
+      value: "metricssvc"
+      effect: "NoSchedule"
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: app
+            operator: In
+            values:
+            - metricssvc    
+    podAntiAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        - labelSelector:
+            matchExpressions:
+            - key: app.kubernetes.io/name
+              operator: In
+              values:
+              - kube-state-metrics
+          topologyKey: topology.kubernetes.io/zone    
+
+prometheus-node-exporter:
+  image:
+    repository: agrid06p1hubacr001.azurecr.io/alpha-telemetry/quay.io/prometheus/node-exporter  
+
+prometheusOperator:
+  enabled: true
+
+  admissionWebhooks:
+    patch:
+      enabled: true
+      image:
+        repository: agrid06p1hubacr001.azurecr.io/alpha-telemetry/k8s.gcr.io/ingress-nginx/kube-webhook-certgen
+        sha: ""
+        pullPolicy: IfNotPresent
+
+  logFormat: json
+
+  tolerations: 
+    - key: "sku"
+      operator: "Equal"
+      value: "metricssvc"
+      effect: "NoSchedule" 
+
+  ## Assign custom affinity rules to the prometheus operator
+  ## ref: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/
+  ##
+  affinity:
+    nodeAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+      - preference:
+          matchExpressions:
+          - key: app
+            operator: In
+            values:
+            - metricssvc
+        weight: 100
+
+  ## Prometheus-operator image
+  ##
+  image:
+    repository: agrid06p1hubacr001.azurecr.io/alpha-telemetry/quay.io/prometheus-operator/prometheus-operator
+    sha: ""
+    pullPolicy: IfNotPresent
+
+  prometheusConfigReloader:
+    # image to use for config and rule reloading
+    image:
+      repository: agrid06p1hubacr001.azurecr.io/alpha-telemetry/quay.io/prometheus-operator/prometheus-config-reloader
+      sha: ""
+  thanosImage:
+    repository: agrid06p1hubacr001.azurecr.io/alpha-telemetry/quay.io/thanos/thanos      
+    sha: "" 
+
+## Deploy a Prometheus instance
+##
+prometheus:
+
+  enabled: true
+
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+    maxUnavailable: ""
+
+  ingress:
+    enabled: true
+
+    # For Kubernetes >= 1.18 you should specify the ingress-controller via the field ingressClassName
+    # See https://kubernetes.io/blog/2020/04/02/improvements-to-the-ingress-api-in-kubernetes-1.18/#specifying-the-class-of-an-ingress
+    ingressClassName: nginx
+
+    annotations:
+      nginx.ingress.kubernetes.io/auth-url: "https://$host/oauth2/auth"
+      nginx.ingress.kubernetes.io/auth-signin: "https://$host/oauth2/start?rd=$escaped_request_uri"
+
+    hosts:
+      - agrid-06-p1-obs.ops.crd.com
+
+    ## Paths to use for ingress rules - one path should match the prometheusSpec.routePrefix
+    ##
+    paths: 
+    - /prometheus
+
+    ## For Kubernetes >= 1.18 you should specify the pathType (determines how Ingress paths should be matched)
+    ## See https://kubernetes.io/blog/2020/04/02/improvements-to-the-ingress-api-in-kubernetes-1.18/#better-path-matching-with-path-types
+    pathType: ImplementationSpecific
+
+  prometheusSpec:
+
+    enableAdminAPI: true
+
+    image:
+      repository: agrid06p1hubacr001.azurecr.io/alpha-telemetry/quay.io/prometheus/prometheus
+      sha: ""
+
+    ## Tolerations for use with node taints
+    ## ref: https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/
+    ##
+    tolerations:
+      - key: "sku"
+        operator: "Equal"
+        value: "metricssvc"
+        effect: "NoSchedule" 
+
+    externalLabels:
+      cluster: prod-06-utility
+      region: eastus2
+
+    ruleSelectorNilUsesHelmValues: false
+
+    serviceMonitorSelectorNilUsesHelmValues: false
+
+    podMonitorSelectorNilUsesHelmValues: false
+
+    retention: 7d
+
+    walCompression: true
+
+    replicas: 1
+
+    logFormat: json
+
+    routePrefix: /prometheus
+
+    podAntiAffinity: "hard"
+
+    ## If anti-affinity is enabled sets the topologyKey to use for anti-affinity.
+    ## This can be changed to, for example, failure-domain.beta.kubernetes.io/zone
+    ##
+    podAntiAffinityTopologyKey: topology.kubernetes.io/zone
+
+    ## Assign custom affinity rules to the prometheus instance
+    ## ref: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/
+    ##
+    affinity:
+      nodeAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+        - preference:
+            matchExpressions:
+            - key: app
+              operator: In
+              values:
+              - metricssvc
+          weight: 100
+
+    storageSpec:
+    # Using PersistentVolumeClaim
+    #
+      volumeClaimTemplate:
+        spec:
+          storageClassName: obs-sc
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 100G
