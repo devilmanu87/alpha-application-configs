@@ -1,0 +1,28 @@
+namespaceOverride: alpha-ingress
+crds:
+  create: true
+  enabled: true
+  keep: false
+image:
+  repository: itacr001.azurecr.io/alpha-ingress/datawire/aes
+  aesTag: 1.14.2
+service:
+  annotations:
+    service.beta.kubernetes.io/azure-load-balancer-internal: "true"
+    service.beta.kubernetes.io/azure-load-balancer-internal-subnet: "dev-lb-sn-001"
+  #loadBalancerIP: 10.135.4.80
+redis:
+  image:
+    repository: itacr001.azurecr.io/alpha-ingress/redis
+adminService:
+  annotations:
+    service.beta.kubernetes.io/azure-load-balancer-internal: "true"
+    service.beta.kubernetes.io/azure-load-balancer-internal-subnet: "dev-lb-sn-001"
+  create: true
+  port: 8877
+  type: LoadBalancer
+metrics:
+  serviceMonitor:
+    enabled: true
+test:
+  image: itacr001.azurecr.io/busybox
