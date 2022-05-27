@@ -1,0 +1,60 @@
+namespaceOverride: alpha-ingress
+crds:
+  create: true
+  enabled: true
+  keep: true
+image:
+  repository: agrid01d1utilityacr001.azurecr.io/alpha-ingress/datawire/aes
+  aesTag: 1.14.2  
+service:
+  annotations:
+    service.beta.kubernetes.io/azure-load-balancer-internal: "true"
+    service.beta.kubernetes.io/azure-load-balancer-internal-subnet: "agrid-01-d1-acn-snet-lb-001"
+redis:
+  image:
+    repository: agrid01d1utilityacr001.azurecr.io/alpha-ingress/redis
+adminService:
+  annotations:
+    service.beta.kubernetes.io/azure-load-balancer-internal: "true"
+    service.beta.kubernetes.io/azure-load-balancer-internal-subnet: "agrid-01-d1-acn-snet-lb-001"
+  create: true
+  port: 8877
+  type: LoadBalancer
+metrics:
+  serviceMonitor:
+    enabled: true
+test:
+  image: agrid01d1utilityacr001.azurecr.io/busybox
+agent:
+  enabled: false
+# podDisruptionBudget:
+#   minAvailable: 1
+#   maxUnavailable: 1
+# security:
+#   podSecurityPolicy:
+#     # Add AppArmor and Seccomp annotations
+#     # https://kubernetes.io/docs/concepts/policy/pod-security-policy/#apparmor
+#     annotations:
+#     spec:
+#       seLinux:
+#         rule: RunAsAny
+#       supplementalGroups:
+#         rule: 'MustRunAs'
+#         ranges:
+#           # Forbid adding the root group.
+#           - min: 1
+#             max: 65535
+#       fsGroup:
+#         rule: 'MustRunAs'
+#         ranges:
+#           # Forbid adding the root group.
+#           - min: 1
+#             max: 65535
+#       privileged: false
+#       allowPrivilegeEscalation: false
+#       runAsUser:
+#         rule: MustRunAsNonRoot
+
+# tolerations: []
+
+createDevPortalMappings: false  
