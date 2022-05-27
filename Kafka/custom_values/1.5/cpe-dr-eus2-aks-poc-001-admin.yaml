@@ -1,0 +1,372 @@
+## Overriding values for Chart's values.yaml
+## Custom values to run Confluent Operator in Alpha Azure K8S Dev environment
+global:
+  provider:
+    name: azure
+    region: eastus2
+    kubernetes:
+       deployment:
+         ## If kubernetes is deployed in multi zone mode then specify availability-zones as appropriate
+         ## If kubernetes is deployed in single availability zone then specify appropriate values
+         zones:
+          - "1"
+          - "2"
+          - "3"
+    ## Docker registry endpoint where Confluent Images are available.
+    ##
+    registry:
+      fqdn: itacr001.azurecr.io/alpha-confluent
+      credential:
+        required: false
+  sasl:
+    plain:
+      username: srv_crddev_obscokfk
+      password: ""
+  authorization:
+    rbac:
+      enabled: true
+    simple:
+      enabled: true
+    superUsers:
+    - User:srv_crddev_obscokfk
+  dependencies:
+    mds:
+      endpoint: https://dr-poc-kf-be-01.crd.com:443
+      publicKey: |-
+  storageClassName: confluent-sc # created manually & specifically for CP Operator with VolumeBindingMode set to "WaitForFirstConsumer" and ReclaimPolicy set to "Retain". 
+  # Disks are automatically made zone aware and taken care by Azure https://docs.microsoft.com/en-us/azure/aks/availability-zones#azure-disks-limitations
+  initContainer:
+    image:
+      tag: 6.1.2.1
+
+## Custom Operator section      
+operator:
+  metrics:
+    prometheus:
+      enabled: true
+
+## Zookeeper cluster
+##
+zookeeper:
+  name: zookeeper
+  replicas: 3
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+  image:
+    tag: 6.1.2.1
+
+## Kafka Cluster
+##
+kafka:
+  name: kafka
+  replicas: 3
+  resources:
+    requests:
+      # cpu: 200m
+      # memory: 1Gi
+  loadBalancer:
+    enabled: true
+    type: internal
+    domain: "crd.com"
+    bootstrapPrefix: "dr-poc-kf-be-01"
+    brokerPrefix: "dr-poc-kf-b00"
+    annotations:
+      service.beta.kubernetes.io/azure-load-balancer-internal: "true"
+      service.beta.kubernetes.io/azure-load-balancer-internal-subnet: "cpe-sr-snet-001"
+  metricReporter:
+    enabled: true
+    publishMs: 30000
+    tls:
+      enabled: true
+      internal: true
+      authentication:
+        type: tls
+    bootstrapEndpoint: kafka.obs-kafka.svc.cluster.local:9071
+  services:
+  ## Rest Proxy configuration
+  ## Required when RBAC is enabled
+  ## username/password are mandatory field
+    restProxy:
+      authentication:
+        username: srv_crddev_obscoerp
+        password: ""
+    mds:
+      https: true
+      ## Token KeyPair
+      ##
+      tokenKeyPair: |-
+      ldap:
+        ## Ldap address as ldap|s://<address>:389|636
+        ##
+        #address: ldaps://crddev.com:636
+        address: ldap://crddev.com:389
+        authentication:
+          simple:
+            credentials: Summer123456
+            principal: CN=srv_crddev_obscomds,OU=Service Accounts,OU=IT Resources,DC=CRDDEV,DC=COM
+        configurations:
+          groupNameAttribute: cn
+          groupObjectClass: group
+          groupMemberAttribute: member
+          groupMemberAttributePattern: CN=(.*),OU=Service Accounts,OU=IT Resources,DC=CRDDEV,DC=COM
+          groupSearchBase: OU=Groups,OU=IT Resources,DC=CRDDEV,DC=COM
+          userNameAttribute: sAMAccountName
+          userMemberOfAttributePattern: CN=(.*),OU=Service Accounts,OU=IT Resources,DC=CRDDEV,DC=COM
+          userObjectClass: organizationalPerson
+          userSearchBase: OU=Service Accounts,OU=IT Resources,DC=CRDDEV,DC=COM
+  configOverrides:
+    server:
+      - confluent.schema.registry.url=https://schemaregistry.obs-kafka.svc.cluster.local:8081
+      - confluent.balancer.heal.uneven.load.trigger=ANY_UNEVEN_LOAD
+      #- allow.everyone.if.no.acl.found = true
+      - listener.name.internal.ssl.principal.mapping.rules=RULE:^.*CN=(.*).*$/$1/L, DEFAULT      
+      - listener.name.replication.ssl.principal.mapping.rules=RULE:^.*CN=(.*).*$/$1/L, DEFAULT
+  tls:
+    enabled: true
+    internalTLS: true
+    # make sure to have super user in CN of the certificate
+    interbrokerTLS: true
+    # kafka certificate should have SAN matches "*.kafka.operator" for jolokia rolling restart.
+    # this is an example.
+    jmxTLS: false
+    #jmxAuthentication:
+    #  type: tls
+    authentication:
+      type: tls
+      principalMappingRules:
+      - RULE:^.*CN=(.*).*$/$1/L
+      - DEFAULT
+    fullchain: |-
+    privkey: |-
+    cacerts: |-
+  options:
+    acl:
+      enabled: true
+      # Value for super.users server property in the format, User:UserName;
+      supers: "User:srv_crddev_obscokfk"
+  image:
+    tag: 6.1.2.1
+  volume:
+    data0: 50Gi
+
+## Connect Cluster
+##
+connect:
+  name: connectors
+  replicas: 1
+  loadBalancer:
+    enabled: true
+    type: internal
+    domain: "crd.com"
+    prefix: "dr-poc-conn-01"
+    annotations:
+      service.beta.kubernetes.io/azure-load-balancer-internal: "true"
+      service.beta.kubernetes.io/azure-load-balancer-internal-subnet: "cpe-sr-snet-001"
+  dependencies:
+    kafka:
+      brokerCount: 3
+      bootstrapEndpoint: kafka.obs-kafka.svc.cluster.local:9071
+      tls:
+        enabled: true
+        internal: true
+        authentication:
+           type: tls
+    schemaRegistry:
+      enabled: true
+      url: https://schemaregistry.obs-kafka.svc.cluster.local:8081
+      tls:
+        enabled: true
+        #authentication:
+        #   type: tls        
+    mds:
+      authentication:
+        username: srv_crddev_obscocnt
+  tls:
+    ### Enable REST Endpoint in SSL mode    
+    enabled: true
+    authentication:
+      type: tls    
+    fullchain: |-
+    privkey: |-
+    cacerts: |-
+  image:
+    repository: confluentinc/cp-server-connect-operator-custom  
+    tag: 6.1.2.1
+
+## Replicator Connect Cluster
+##
+replicator:
+  name: replicator
+  replicas: 1
+  loadBalancer:
+    enabled: true
+    domain: "crd.com"
+    prefix: "dr-poc-rr-01"
+    type: internal
+    annotations:
+      service.beta.kubernetes.io/azure-load-balancer-internal: "true"
+      service.beta.kubernetes.io/azure-load-balancer-internal-subnet: "cpe-sr-snet-001"
+  dependencies:
+    kafka:
+      tls:
+        enabled: true
+        internal: true
+        authentication:
+           type: tls
+      brokerCount: 3
+      bootstrapEndpoint: kafka.obs-kafka.svc.cluster.local:9071
+    mds:
+      authentication:
+        username: srv_crddev_obscorep
+  tls:
+    enabled: true
+    authentication:
+      type: tls    
+    fullchain: |-
+    privkey: |-
+    cacerts: |-
+  image:
+    tag: 6.1.2.1
+
+##
+## Schema Registry
+##
+schemaregistry:
+  name: schemaregistry
+  loadBalancer:
+    enabled: true
+    type: internal
+    domain: "crd.com"
+    prefix: "dr-poc-sr-01"
+    annotations:
+      service.beta.kubernetes.io/azure-load-balancer-internal: "true"
+      service.beta.kubernetes.io/azure-load-balancer-internal-subnet: "cpe-sr-snet-001"
+  dependencies:
+    kafka:
+      brokerCount: 3
+      bootstrapEndpoint: kafka.obs-kafka.svc.cluster.local:9071
+      tls:
+        enabled: true
+        internal: true
+        authentication:
+           type: tls
+    mds:
+      authentication:
+        username: srv_crddev_obscosr
+  tls:
+    enabled: true
+    #authentication:
+    #  type: tls    
+    fullchain: |-
+    privkey: |-
+    cacerts: |-
+  image:
+    tag: 6.1.2.1
+
+## Control Center (C3) Resource configuration
+##
+controlcenter:
+  name: controlcenter
+  ##
+  ## C3 External Access
+  ##
+  loadBalancer:
+    enabled: true
+    type: internal
+    domain: "crd.com"
+    prefix: "dr-poc-c3-01"
+    annotations:
+      service.beta.kubernetes.io/azure-load-balancer-internal: "true"
+      service.beta.kubernetes.io/azure-load-balancer-internal-subnet: "cpe-sr-snet-001"
+  ##
+  ## C3 dependencies
+  ##
+  dependencies:  
+    c3KafkaCluster:
+      brokerCount: 3
+      bootstrapEndpoint: kafka.obs-kafka.svc.cluster.local:9071
+      tls:
+        enabled: true
+        internal: true
+        authentication:
+           type: tls 
+      zookeeper:
+        endpoint: zookeeper.obs-kafka.svc.cluster.local:2181
+    connectCluster:
+      enabled: true
+      url: https://connectors.obs-kafka.svc.cluster.local:8083
+      tls:
+        enabled: true     
+    ksql:
+      enabled: true
+      url: https://ksql.obs-kafka.svc.cluster.local:8088
+      advertisedUrl: https://dr-poc-ksql-01.crd.com
+      tls:
+        enabled: true       
+    schemaRegistry:
+      enabled: true
+      url: https://schemaregistry.obs-kafka.svc.cluster.local:8081
+      tls:
+        enabled: true  
+    mds:
+      authentication:
+        username: srv_crddev_obscoc3
+  ##
+  ## TLS configuration
+  ##
+  tls:
+    enabled: true 
+    fullchain: |-
+    privkey: |-
+    cacerts: |-
+  image:
+    tag: 6.1.2.1
+  volume:
+    data0: 50Gi
+
+##
+## KSQL
+##
+ksql:
+  name: ksql
+  replicas: 1
+  loadBalancer:
+    enabled: true
+    type: internal
+    domain: "crd.com"
+    prefix: "dr-poc-ksql-01"
+    annotations:
+      service.beta.kubernetes.io/azure-load-balancer-internal: "true"
+      service.beta.kubernetes.io/azure-load-balancer-internal-subnet: "cpe-sr-snet-001"
+  dependencies:
+    kafka:
+      brokerCount: 3
+      bootstrapEndpoint: kafka.obs-kafka.svc.cluster.local:9071
+      tls:
+        enabled: true
+        internal: true
+        authentication:
+           type: tls 
+      # make sure to add the additional endpoints below based on the brokerCount value above
+      brokerEndpoints: kafka-0.kafka.obs-kafka.svc.cluster.local:9071,kafka-1.kafka.obs-kafka.svc.cluster.local:9071,kafka-2.kafka.obs-kafka.svc.cluster.local:9071
+    schemaRegistry:
+      enabled: true
+      url: https://schemaregistry.obs-kafka.svc.cluster.local:8081
+      tls:
+        enabled: true
+        #authentication:
+        #  type: tls        
+    mds:
+      authentication:
+        username: srv_crddev_obscoksql
+  tls:
+    enabled: true
+    authentication:
+      type: tls    
+    fullchain: |-
+    privkey: |-
+    cacerts: |-
+  image:
+    tag: 6.1.2.1
