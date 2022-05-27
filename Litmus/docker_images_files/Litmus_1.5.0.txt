@@ -1,0 +1,17 @@
+litmuschaos/litmusportal-frontend:2.5.0
+litmuschaos/upgrade-agent-cp:2.5.0
+litmuschaos/litmusportal-server:2.5.0
+litmuschaos/litmusportal-auth-server:2.5.0
+litmuschaos/litmusportal-subscriber:2.5.0
+litmuschaos/litmusportal-event-tracker:2.5.0
+litmuschaos/workflow-controller:v3.2.3
+litmuschaos/argoexec:v3.2.3
+litmuschaos/chaos-operator:2.4.0
+litmuschaos/chaos-runner:2.4.0
+litmuschaos/chaos-exporter:2.4.0
+litmuschaos/mongo:4.2.8
+litmuschaos/curl:latest
+litmuschaos/mongo-utils:latest
+litmuschaos/litmus-checker:latest
+litmuschaos/litmus-app-deployer:latest
+litmuschaos/k8s:latest
