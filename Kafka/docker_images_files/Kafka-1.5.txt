@@ -1,0 +1,10 @@
+confluentinc/cp-server-connect-operator:6.1.2.1
+confluentinc/cp-enterprise-control-center-operator:6.1.2.1
+registry.opensource.zalan.do/teapot/external-dns:v0.5.14
+confluentinc/cp-server-operator:6.1.2.1
+confluentinc/cp-ksqldb-server-operator:6.1.2.1
+confluentinc/cp-operator-service:0.419.10
+confluentinc/cp-enterprise-replicator-operator:6.1.2.1
+confluentinc/cp-schema-registry-operator:6.1.2.1
+confluentinc/cp-zookeeper-operator:6.1.2.1
+confluentinc/cp-init-container-operator:6.1.2.1
