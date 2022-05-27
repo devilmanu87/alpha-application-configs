@@ -1,0 +1,258 @@
+global:
+  imageRegistry: agrid06p1hubacr001.azurecr.io
+image:
+  registry: agrid06p1hubacr001.azurecr.io
+  repository: obs-logging/bitnami/fluentd
+  tag: 1.14.4-debian-10-r11
+metrics:
+  ## @param metrics.enabled Enable the export of Prometheus metrics
+  ##
+  enabled: true
+  serviceMonitor:
+    ## @param metrics.serviceMonitor.enabled if `true`, creates a Prometheus Operator ServiceMonitor (also requires `metrics.enabled` to be `true`)
+    ##
+    enabled: true
+forwarder:
+  enabled: true
+  persistence:
+    enabled: true
+  extraEnvVars:
+    - name: K8S_CLUSTER_NAME
+      value: agrid-07-spoke1  
+    - name: K8S_NODE_NAME
+      valueFrom:
+        fieldRef:
+          fieldPath: spec.nodeName
+  configMapFiles:
+    fluentd.conf: |
+      # Ignore fluentd own events
+      <match fluent.**>
+        @type null
+      </match>
+
+      @include fluentd-inputs.conf
+      @include fluentd-output.conf      
+      {{- if .Values.metrics.enabled }}
+      @include metrics.conf
+      {{- end }}    
+    fluentd-inputs.conf: |
+      # HTTP input for the liveness and readiness probes
+      <source>
+        @type http
+        port 9880
+      </source>
+      # Get the logs from the containers running in the node
+      <source>
+        @type tail
+        path /var/log/containers/*.log
+        # exclude Fluentd logs
+        exclude_path /var/log/containers/*fluentd*.log
+        pos_file /opt/bitnami/fluentd/logs/buffers/fluentd-docker.pos
+        tag kubernetes.*
+        read_from_head true
+        <parse>
+          @type multi_format
+          <pattern>
+            format json
+            time_key time
+            time_type string
+            time_format "%Y-%m-%dT%H:%M:%S.%NZ"
+            keep_time_key false
+          </pattern>
+          <pattern>
+            format regexp
+            expression /^(?<time>.+) (?<stream>stdout|stderr)( (.))? (?<log>.*)$/
+            time_format %Y-%m-%dT%H:%M:%S.%NZ
+            keep_time_key false
+          </pattern>
+        </parse>
+        emit_unmatched_lines true
+      </source>
+      # enrich with kubernetes metadata
+      <filter kubernetes.**>
+        @type kubernetes_metadata
+      </filter>
+      <filter **>
+        @type record_transformer
+        <record>
+          kubernetes_cluster_name "#{ENV['K8S_CLUSTER_NAME']}"
+        </record>
+      </filter>
+      <filter kubernetes.var.log.containers.**>
+        @type parser
+        <parse>
+          @type json
+          json_parser json
+        </parse>
+        replace_invalid_sequence true
+        emit_invalid_record_to_error false
+        key_name log
+        reserve_data true
+      </filter>
+    fluentd-output.conf: |
+      # Throw the healthcheck to the standard output instead of forwarding it
+      <match fluentd.healthcheck>
+        @type stdout
+      </match>
+      {{- if .Values.aggregator.enabled }}
+      # Forward all logs to the aggregators
+      <match **>
+        @type forward
+        {{- if .Values.tls.enabled }}
+        transport tls
+        tls_cert_path /opt/bitnami/fluentd/certs/out_forward/ca.crt
+        tls_client_cert_path /opt/bitnami/fluentd/certs/out_forward/tls.crt
+        tls_client_private_key_path /opt/bitnami/fluentd/certs/out_forward/tls.key
+        {{- end }}
+
+        {{- $fullName := (include "common.names.fullname" .) }}
+        {{- $global := . }}
+        {{- $domain := default "cluster.local" .Values.clusterDomain }}
+        {{- $port := .Values.aggregator.port | int }}
+        {{- range $i, $e := until (.Values.aggregator.replicaCount | int) }}
+        <server>
+          {{ printf "host %s-%d.%s-headless.%s.svc.%s" $fullName $i $fullName $global.Release.Namespace $domain }}
+          {{ printf "port %d" $port }}
+        </server>
+        {{- end }}
+        <buffer>
+          @type file
+          path /opt/bitnami/fluentd/logs/buffers/logs.buffer
+          flush_thread_count 2
+          flush_interval 5s
+        </buffer>
+      </match>
+      {{- else }}
+      # Send the logs to the standard output
+      <match **>
+        @type stdout
+      </match>
+      {{- end }}       
+    metrics.conf: |
+      # Prometheus Exporter Plugin
+      # input plugin that exports metrics
+      <source>
+        @type prometheus
+        port {{ .Values.metrics.service.port }}
+      </source>
+      # input plugin that collects metrics from MonitorAgent
+      <source>
+        @type prometheus_monitor
+        <labels>
+          host ${hostname}
+        </labels>
+      </source>
+      # input plugin that collects metrics for output plugin
+      <source>
+        @type prometheus_output_monitor
+        <labels>
+          host ${hostname}
+        </labels>
+      </source>
+      # input plugin that collects metrics for in_tail plugin
+      <source>
+        @type prometheus_tail_monitor
+        <labels>
+          host ${hostname}
+        </labels>
+      </source>
+  livenessProbe:
+    enabled: true
+    initialDelaySeconds: 300      
+  tolerations:
+    - effect: NoSchedule
+      operator: Exists
+aggregator:
+  enabled: true
+  replicaCount: 6
+  persistence:
+    storageClass: obs-sc
+    enabled: true
+    size: 120Gi
+    ## @param aggregator.extraEnv Extra environment variables to pass to the container
+  extraEnvVars:
+    - name: K8S_NODE_NAME
+      valueFrom:
+        fieldRef:
+          fieldPath: spec.nodeName
+  serviceAccount:
+    # create: true        
+    name: obs-bitnami-fluentd-forwarder
+  configMapFiles:
+    fluentd.conf: |
+      # Ignore fluentd own events
+      <match fluent.**>
+        @type null
+      </match>
+
+      @include fluentd-inputs.conf
+      @include fluentd-output.conf
+      {{- if .Values.metrics.enabled }}
+      @include metrics.conf
+      {{- end }}    
+    fluentd-output.conf: |
+      # Forward all logs to the aggregators
+      <match **>
+        @type forward
+        send_timeout 60s
+        recover_wait 10s
+        hard_timeout 60s
+      # Need to change this to DNS FQDN instead
+        <server>
+          host 10.16.134.158
+          port 24224
+        </server>
+
+        <buffer>
+          @type file
+          path /opt/bitnami/fluentd/logs/buffers/aggregator.logs.buffer
+          chunk_limit_size 128MB
+          overflow_action block
+          queued_chunks_limit_size 8
+          retry_max_interval 30
+          retry_type periodic
+          retry_wait 60s
+          flush_thread_count 8
+          flush_interval 20s
+          retry_forever false
+          flush_at_shutdown true
+        </buffer>
+      </match>
+    metrics.conf: |
+      # Prometheus Exporter Plugin
+      # input plugin that exports metrics
+      <source>
+        @type prometheus
+        port {{ .Values.metrics.service.port }}
+      </source>
+
+      # input plugin that collects metrics from MonitorAgent
+      <source>
+        @type prometheus_monitor
+        <labels>
+          host ${hostname}
+        </labels>
+      </source>
+
+      # input plugin that collects metrics for output plugin
+      <source>
+        @type prometheus_output_monitor
+        <labels>
+          host ${hostname}
+        </labels>
+      </source>      
+  tolerations:
+    - key: "sku"
+      operator: "Equal"
+      value: "generalsvc"
+      effect: "NoSchedule" 
+  affinity:
+    nodeAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+      - preference:
+          matchExpressions:
+          - key: app_pool
+            operator: In
+            values:
+            - generalsvc
+        weight: 100         
