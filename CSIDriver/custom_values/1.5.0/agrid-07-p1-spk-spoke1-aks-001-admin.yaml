@@ -1,0 +1,47 @@
+#E Custom values for images and accepting default values for Linux based AKS cluster
+linux:
+  image:
+    repository: agrid06p1hubacr001.azurecr.io/agrid-csi/mcr.microsoft.com/oss/azure/secrets-store/provider-azure
+    tag: v1.0.0
+    pullPolicy: IfNotPresent
+  tolerations:
+    - effect: NoSchedule
+      operator: Exists
+  enabled: true
+
+# logging format json
+# Default is text.
+logFormatJSON: true
+
+## Configuration values for the secrets-store-csi-driver dependency.
+## ref: https://github.com/kubernetes-sigs/secrets-store-csi-driver/tree/master/charts/secrets-store-csi-driver/README.md
+##
+secrets-store-csi-driver:
+  install: true
+  linux:
+    enabled: true
+    tolerations:
+    - effect: NoSchedule
+      operator: Exists
+    kubeletRootDir: /var/lib/kubelet
+    metricsAddr: ":8080"
+    image:
+      repository: agrid06p1hubacr001.azurecr.io/agrid-csi/mcr.microsoft.com/oss/kubernetes-csi/secrets-store/driver
+      tag: v1.0.0
+      pullPolicy: IfNotPresent
+    registrarImage:
+      repository: agrid06p1hubacr001.azurecr.io/agrid-csi/mcr.microsoft.com/oss/kubernetes-csi/csi-node-driver-registrar
+      tag: v2.3.0
+      pullPolicy: IfNotPresent
+    livenessProbeImage:
+      repository: agrid06p1hubacr001.azurecr.io/agrid-csi/mcr.microsoft.com/oss/kubernetes-csi/livenessprobe
+      tag: v2.4.0
+      pullPolicy: IfNotPresent
+    crds:
+      image:
+        repository: agrid06p1hubacr001.azurecr.io/agrid-csi/mcr.microsoft.com/oss/kubernetes-csi/secrets-store/driver-crds
+        tag: v1.0.0
+        pullPolicy: IfNotPresent
+
+  syncSecret:
+    enabled: true
