@@ -1,0 +1,34 @@
+crds:
+  create: true
+  enabled: true
+  keep: false
+replicaCount: 1
+image:
+  repository: itacr001.azurecr.io/alpha-ingress/datawire/aes
+  aesTag: 1.14.2  
+service:
+  annotations:
+    service.beta.kubernetes.io/azure-load-balancer-internal: "true"
+  ports:
+  - name: https-8443
+    port: 8443
+    targetPort: 8443
+  - name: http
+    port: 80
+    targetPort: 8080
+  - name: https
+    port: 443
+    targetPort: 8443    
+redis:
+  image:
+    repository: itacr001.azurecr.io/alpha-ingress/redis
+adminService:
+  annotations:
+    service.beta.kubernetes.io/azure-load-balancer-internal: "true"
+  create: true
+  port: 8877
+  type: LoadBalancer
+test:
+  image: itacr001.azurecr.io/alpha-ingress/busybox
+agent:
+  enabled: false
