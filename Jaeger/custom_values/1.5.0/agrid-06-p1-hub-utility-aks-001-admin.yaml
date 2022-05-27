@@ -1,0 +1,286 @@
+# Default values for jaeger.
+# This is a YAML-formatted file.
+# Jaeger values are grouped by component. Cassandra values override subchart values
+
+provisionDataStore:
+  cassandra: false
+  elasticsearch: false
+  kafka: false
+
+# Overrides the image tag where default is the chart appVersion.
+tag: 1.30.0
+
+nameOverride: ""
+fullnameOverride: ""
+
+allInOne:
+  enabled: false
+  image: agrid06p1hubacr001.azurecr.io/obs-tracing/jaegertracing/all-in-one
+  tag: 1.30.0
+  pullPolicy: IfNotPresent
+  # samplingConfig: |-
+  #   {
+  #     "default_strategy": {
+  #       "type": "probabilistic",
+  #       "param": 1
+  #     }
+  #   }
+
+
+storage:
+  # allowed values (cassandra, elasticsearch)
+  type: elasticsearch
+  elasticsearch:
+    scheme: http
+    host: elasticsearch-master.obs-logging
+    port: 9200
+    ## user: elastic
+    ## usePassword: true
+    ## password: changeme
+    indexPrefix: alpha-tracing-p1
+    ## Use existing secret (ignores previous password)
+    # existingSecret:
+    # existingSecretKey:
+    nodesWanOnly: false
+    extraEnv: []
+      ## ES related env vars to be configured on the concerned components
+      # - name: ES_SERVER_URLS
+      #   value: http://elasticsearch-master:9200
+      # - name: ES_USERNAME
+      #   value: elastic
+      # - name: ES_INDEX_PREFIX
+    #   value: test
+    ## ES related cmd line opts to be configured on the concerned components
+    cmdlineParams: {}
+      # es.server-urls: http://elasticsearch-master:9200
+      # es.username: elastic
+    # es.index-prefix: test
+  kafka:
+    brokers:
+      - agrid-p1-kf-be-01.thealphacloud.com:9092
+    topic: alpha-tracing-p1.jaeger.spans
+    authentication: tls
+    extraEnv: []
+
+# Begin: Default values for the various components of Jaeger
+# This chart has been based on the Kubernetes integration found in the following repo:
+# https://github.com/jaegertracing/jaeger-kubernetes/blob/master/production/jaeger-production-template.yml
+#
+# For configurable values of the elasticsearch if provisioned, please see:
+# https://github.com/elastic/helm-charts/tree/master/elasticsearch#configuration
+# elasticsearch: {}
+agent:
+  enabled: false
+
+collector:
+  enabled: false
+
+ingester:
+  enabled: true
+  podSecurityContext: {}
+  securityContext: {}
+  annotations: {}
+  image: agrid06p1hubacr001.azurecr.io/obs-tracing/jaegertracing/jaeger-ingester
+  imagePullSecrets: []
+  pullPolicy: IfNotPresent
+  dnsPolicy: ClusterFirst
+  cmdlineParams:
+    kafka.consumer.tls.ca: /tls/ca/ConfluentAGRID-P1-CA.pem
+    kafka.consumer.tls.cert: /tls/client/tls.crt
+    kafka.consumer.tls.key: /tls/client/tls.key
+    kafka.consumer.encoding: json
+    kafka.consumer.tls.enabled: true
+  replicaCount: 1
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 10
+    # targetCPUUtilizationPercentage: 80
+    # targetMemoryUtilizationPercentage: 80
+  service:
+    annotations: {}
+    # List of IP ranges that are allowed to access the load balancer (if supported)
+    loadBalancerSourceRanges: []
+    type: ClusterIP
+  resources: {}
+    # limits:
+    #   cpu: 1
+    #   memory: 1Gi
+    # requests:
+    #   cpu: 500m
+  #   memory: 512Mi
+  serviceAccount:
+    create: true
+    # Explicitly mounts the API credentials for the Service Account
+    automountServiceAccountToken: false
+    name:
+  nodeSelector: {}
+  tolerations:
+    - key: "sku"
+      operator: "Equal"
+      value: "ingest"
+      effect: "NoSchedule"
+  affinity:
+    nodeAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - preference:
+            matchExpressions:
+              - key: app
+                operator: In
+                values:
+                  - ingest
+          weight: 100
+  podAnnotations: {}
+  ## Additional pod labels
+  ## ref: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
+  podLabels: {}
+  extraSecretMounts:
+    - name: cp-tls
+      mountPath: /tls/client/
+      subPath: ""
+      secretName: cp-tls
+      readOnly: true
+    - name: cp-ca
+      mountPath: /tls/ca/
+      subPath: ""
+      secretName: cp-ca
+      readOnly: true
+  extraConfigmapMounts: []
+
+  serviceMonitor:
+    enabled: true
+    additionalLabels: {}
+
+query:
+  enabled: true
+  oAuthSidecar:
+    enabled: false
+    image: agrid06p1hubacr001.azurecr.io/obs-logging/quay.io/oauth2-proxy/oauth2-proxy
+    pullPolicy: IfNotPresent
+    containerPort: 4180
+    args: []
+    extraEnv: []
+    extraConfigmapMounts: []
+    extraSecretMounts: []
+  # config: |-
+  #   provider = "oidc"
+  #   https_address = ":4180"
+  #   upstreams = ["http://localhost:16686"]
+  #   redirect_url = "https://jaeger-svc-domain/oauth2/callback"
+  #   client_id = "jaeger-query"
+  #   oidc_issuer_url = "https://keycloak-svc-domain/auth/realms/Default"
+  #   cookie_secure = "true"
+  #   email_domains = "*"
+  #   oidc_groups_claim = "groups"
+  #   user_id_claim = "preferred_username"
+  #   skip_provider_button = "true"
+  podSecurityContext: {}
+  securityContext: {}
+  agentSidecar:
+    enabled: false
+  annotations: {}
+  image: agrid06p1hubacr001.azurecr.io/obs-tracing/jaegertracing/jaeger-query
+  imagePullSecrets: []
+  pullPolicy: IfNotPresent
+  dnsPolicy: ClusterFirst
+  cmdlineParams: {}
+  extraEnv: []
+  replicaCount: 3
+  service:
+    annotations: {}
+    type: ClusterIP
+    # List of IP ranges that are allowed to access the load balancer (if supported)
+    loadBalancerSourceRanges: []
+    port: 80
+    # Specify a custom target port (e.g. port of auth proxy)
+    # targetPort: 8080
+    # Specify a specific node port when type is NodePort
+    # nodePort: 32500
+  basePath: /jaeger/p1/
+  ingress:
+    enabled: true
+    annotations:
+      #kubernetes.io/ingress.class: obs-nginx-ingress
+      nginx.ingress.kubernetes.io/auth-url: "https://$host/oauth2/auth"
+      nginx.ingress.kubernetes.io/auth-signin: "https://$host/oauth2/start?rd=$escaped_request_uri"
+    hosts:
+      - agrid-06-p1-obs.ops.crd.com
+      # For Kubernetes >= 1.18 you should specify the ingress-controller via the field ingressClassName
+      # See https://kubernetes.io/blog/2020/04/02/improvements-to-the-ingress-api-in-kubernetes-1.18/#specifying-the-class-of-an-ingress
+    ingressClassName: nginx
+      #annotations: {}
+      # Used to create an Ingress record.
+      # hosts:
+      #   - chart-example.local
+      # annotations:
+      # kubernetes.io/ingress.class: nginx
+      # kubernetes.io/tls-acme: "true"
+      # tls:
+      # Secrets must be manually created in the namespace.
+      # - secretName: chart-example-tls
+      #   hosts:
+      #     - chart-example.local
+    health:
+      exposed: false
+  resources: {}
+    # limits:
+    #   cpu: 500m
+    #   memory: 512Mi
+    # requests:
+    #    cpu: 256m
+  #    memory: 128Mi
+  serviceAccount:
+    create: true
+    # Explicitly mounts the API credentials for the Service Account
+    automountServiceAccountToken: false
+    name:
+    annotations: {}
+  nodeSelector: {}
+  tolerations:
+    - key: "sku"
+      operator: "Equal"
+      value: "general"
+      effect: "NoSchedule"
+  affinity:
+    nodeAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - preference:
+            matchExpressions:
+              - key: app
+                operator: In
+                values:
+                  - general
+          weight: 100
+  podAnnotations: {}
+  ## Additional pod labels
+  ## ref: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
+  podLabels: {}
+  extraConfigmapMounts: []
+  # - name: jaeger-config
+  #   mountPath: /config
+  #   subPath: ""
+  #   configMap: jaeger-config
+  #   readOnly: true
+  extraVolumes: []
+  sidecars: []
+  ##   - name: your-image-name
+  ##     image: your-image
+  ##     ports:
+  ##       - name: portname
+  ##         containerPort: 1234
+  priorityClassName: ""
+  serviceMonitor:
+    enabled: true
+    additionalLabels: {}
+  # config: |-
+  #   {
+  #     "dependencies": {
+  #       "dagMaxNumServices": 200,
+  #       "menuEnabled": true
+  #     },
+  #     "archiveEnabled": true,
+  #     "tracking": {
+  #       "gaID": "UA-000000-2",
+  #       "trackErrors": true
+  #     }
+  #   }
