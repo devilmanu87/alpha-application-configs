@@ -1,0 +1,6 @@
+jaegertracing/jaeger-agent:1.30.0
+jaegertracing/jaeger-collector:1.30.0
+jaegertracing/jaeger-ingester:1.30.0
+jaegertracing/jaeger-operator:1.29.1
+jaegertracing/jaeger-query:1.30.0
+jaegertracing/all-in-one:1.30.0
