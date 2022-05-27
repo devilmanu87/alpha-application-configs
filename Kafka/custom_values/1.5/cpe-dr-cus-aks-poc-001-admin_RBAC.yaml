@@ -1,0 +1,109 @@
+schemaregistry:
+    user: srv_crddev_obscosr
+    key: srv_crddev_obscosr-server.key
+    cert: srv_crddev_obscosr-server.crt
+    roles:
+       - role: SecurityAdmin
+         id: schema-registry-cluster
+         name: id_schemaregistry_${NAMESPACE}
+       - role: ResourceOwner
+         resource:
+            Group: id_schemaregistry_${NAMESPACE}
+       - role: ResourceOwner
+         resource:
+            Topic: _schemas_schemaregistry_${NAMESPACE}
+       - role: ResourceOwner
+         resource:
+            Topic: _confluent-license
+       - role: DeveloperRead
+         id: schema-registry-cluster
+         name: id_schemaregistry_${NAMESPACE}
+         resource:
+            Subject: "*"
+
+connect:
+    user: srv_crddev_obscocnt
+    key: srv_crddev_obscocnt-server.key
+    cert: srv_crddev_obscocnt-server.crt    
+    roles:
+       - role: SecurityAdmin
+         id: connect-cluster
+         name: ${NAMESPACE}.connectors
+       - role: ResourceOwner
+         resource:
+            Group: ${NAMESPACE}.connectors
+       - role: ResourceOwner
+         resource:
+            Topic: ${NAMESPACE}.connectors-
+         patternType: PREFIXED           
+       - role: DeveloperWrite
+         resource:
+            Topic: _confluent-monitoring
+         patternType: PREFIXED
+
+replicator:
+    user: srv_crddev_obscorep
+    key: srv_crddev_obscorep-server.key
+    cert: srv_crddev_obscorep-server.crt    
+    roles:
+       - role: ResourceOwner
+         resource:
+            Group: ${NAMESPACE}.replicator
+       - role: ResourceOwner
+         resource:
+            Topic: ${NAMESPACE}.replicator-
+         patternType: PREFIXED
+       - role: DeveloperWrite
+         resource:
+            Topic: _confluent-monitoring
+         patternType: PREFIXED
+
+ksqldb:
+    user: srv_crddev_obscoksql
+    key: srv_crddev_obscoksql-server.key
+    cert: srv_crddev_obscoksql-server.crt    
+    roles:
+       - role: ResourceOwner
+         id: ksql-cluster
+         name: ${NAMESPACE}.ksql_
+         resource:
+            KsqlCluster: ksql-cluster
+       - role: ResourceOwner
+         resource:     
+            Topic: _confluent-ksql-${NAMESPACE}.ksql_
+         patternType: PREFIXED
+
+controlcenter:
+   user: srv_crddev_obscoc3
+   key: srv_crddev_obscoc3-server.key
+   cert: srv_crddev_obscoc3-server.crt    
+   roles:
+      - role: SystemAdmin
+
+erp:
+    user: srv_crddev_obscoerp
+    roles:
+       - role: DeveloperRead
+         id: schema-registry-cluster
+         name: id_schemaregistry_${NAMESPACE}
+         resource:
+            Subject: "*"
+
+c3-users:
+    user: srv_crddev_obscoadm
+    roles:
+       - role: SystemAdmin
+       - role: SystemAdmin
+         id: schema-registry-cluster
+         name: id_schemaregistry_${NAMESPACE}
+       - role: SystemAdmin
+         id: connect-cluster
+         name: ${NAMESPACE}.connectors
+       - role: SystemAdmin
+         id: connect-cluster
+         name: ${NAMESPACE}.replicator
+       - role: ResourceOwner
+         id: ksql-cluster
+         name: ${NAMESPACE}.ksql_
+         resource:
+             KsqlCluster: ksql-cluster 
